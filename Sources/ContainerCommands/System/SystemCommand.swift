@@ -26,9 +26,11 @@ extension Application {
             subcommands: [
                 SystemDF.self,
                 SystemDNS.self,
+                SystemInfo.self,
                 SystemKernel.self,
                 SystemLogs.self,
                 SystemProperty.self,
+                SystemPrune.self,
                 SystemStart.self,
                 SystemStatus.self,
                 SystemStop.self,

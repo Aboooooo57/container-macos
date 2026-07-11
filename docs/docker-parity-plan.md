@@ -157,9 +157,14 @@ result gets to full Docker parity for everyday single-container workflows.
 > Virtualization/XPC/Darwin, so it cannot build in the Linux CI sandbox used
 > for this change. A `swift build` + `swift test` on macOS is required before
 > merge.
-3. **`container system prune`** — new `ContainerCommands/System/SystemPrune.swift`. Fans out to the existing `ContainerPrune`, `ImagePrune`, `NetworkPrune`, `VolumePrune` logic (call the same underlying client methods each of those commands calls), gated by a confirmation prompt and `-f/--force`/`--volumes` flags to match Docker's UX.
-4. **`container image history`** — new `ContainerCommands/Image/ImageHistory.swift`, built from `ClientImage.config(for:)` which already returns the OCI `history` array; format as a table.
-5. **`container system info`** — new `ContainerCommands/System/SystemInfo.swift`, aggregates existing `SystemStatus`, `SystemVersion`, `SystemDF` data sources into one summary view.
+3. **`container system prune`** — ✅ **implemented** in `ContainerCommands/System/SystemPrune.swift`. Fans out to the existing `ContainerPrune`/`ImagePrune`/`NetworkPrune`/`VolumePrune` commands (constructs each and calls `run()`, so the deletion logic is reused, not duplicated), gated by a confirmation prompt with `-f/--force`, `-a/--all` (all unused images), and `--volumes`. Network pruning is guarded by `#available(macOS 26)`. Registered + documented.
+4. **`container image history`** — ✅ **implemented** in `ContainerCommands/Image/ImageHistory.swift`, built from `ClientImage.config(for:)` (OCI `history`) + `manifest(for:)` (layer sizes). Maps non-empty history records to layers in order, prints newest-first with `--no-trunc`/`--format`/platform flags. Registered, documented, unit-tested (`Tests/ContainerCommandsTests/ImageHistoryTests.swift`).
+5. **`container system info`** — ✅ **implemented** in `ContainerCommands/System/SystemInfo.swift`; aggregates `ClientHealthCheck` (server/version/roots), `ContainerClient.list` (container counts), `ClientDiskUsage` (image/volume counts + size), and `ProcessInfo`/`Arch` (host OS/arch/CPU/memory) into one view. Degrades gracefully when the daemon is down. Registered + documented.
+
+> **Phase 1 complete.** All five commands authored against verified source
+> APIs (OCI `History`/`Manifest` fields confirmed against the pinned
+> `containerization` 0.37.0 tag). Still **not compiled** — needs
+> `swift build && swift test` on macOS before merge, per the note above.
 
 ### Phase 2 — Small backend additions (new XPC route, existing service processes)
 

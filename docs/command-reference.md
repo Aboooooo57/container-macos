@@ -732,6 +732,28 @@ container image inspect [--debug] <images> ...
 
 No options.
 
+### `container image history`
+
+Shows the layer history of an image, newest first. Each row lists when the layer was created, the build instruction that created it, the layer size, and any comment. Records that did not produce a filesystem layer (e.g. `ENV`, `CMD`) are shown with a size of 0.
+
+**Usage**
+
+```bash
+container image history [--arch <arch>] [--os <os>] [--platform <platform>] [--no-trunc] [--format <format>] [--debug] <image>
+```
+
+**Arguments**
+
+*   `<image>`: Image name
+
+**Options**
+
+*   `-a, --arch <arch>`: Architecture of the image variant to inspect (default: host architecture)
+*   `--os <os>`: OS of the image variant to inspect (default: linux)
+*   `--platform <platform>`: Platform of the image variant to inspect (format: `os/arch[/variant]`, takes precedence over `--os` and `--arch`)
+*   `--no-trunc`: Don't truncate the CREATED BY column
+*   `--format <format>`: Output format, `table` or `json` (default: table)
+
 ## Builder Management
 
 The builder commands manage the BuildKit-based builder used for image builds.
@@ -1519,6 +1541,36 @@ container system df [--format <format>] [--debug]
 **Options**
 
 *   `--format <format>`: Format of the output (values: json, table, yaml, toml; default: table)
+
+### `container system info`
+
+Displays system-wide information: CLI and API server versions, application/install roots, container counts (total, running, stopped), image and volume counts, image disk usage, and host details (OS, architecture, CPUs, memory). Host and CLI details are shown even when the API server is not running.
+
+**Usage**
+
+```bash
+container system info [--format <format>] [--debug]
+```
+
+**Options**
+
+*   `--format <format>`: Format of the output, `table` or `json` (default: table)
+
+### `container system prune`
+
+Removes unused resources: stopped containers, networks not used by any container, and dangling images. With `--all`, all images not used by a container are removed. With `--volumes`, unused volumes are also removed. Prompts for confirmation unless `--force` is given.
+
+**Usage**
+
+```bash
+container system prune [--all] [--force] [--volumes] [--debug]
+```
+
+**Options**
+
+*   `-a, --all`: Remove all unused images, not just dangling ones
+*   `-f, --force`: Do not prompt for confirmation
+*   `--volumes`: Also prune unused volumes
 
 ### `container system dns create`
 

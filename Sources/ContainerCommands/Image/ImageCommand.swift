@@ -26,6 +26,7 @@ extension Application {
             abstract: "Manage images",
             subcommands: [
                 ImageDelete.self,
+                ImageHistory.self,
                 ImageInspect.self,
                 ImageList.self,
                 ImageLoad.self,
