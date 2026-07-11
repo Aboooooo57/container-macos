@@ -314,6 +314,41 @@ container kill [--all] [--signal <signal>] [--debug] [<container-ids> ...]
 *   `-a, --all`: Kill or signal all running containers
 *   `-s, --signal <signal>`: Signal to send to the container(s) (default: KILL)
 
+### `container restart`
+
+Restarts one or more containers. Each container is stopped gracefully (sending a signal and waiting up to `--time` seconds before a SIGKILL) if it is running, then started again in the background. If no containers are specified, nothing is restarted unless `--all` is used.
+
+**Usage**
+
+```bash
+container restart [--all] [--signal <signal>] [--time <time>] [--debug] [<container-ids> ...]
+```
+
+**Arguments**
+
+*   `<container-ids>`: Container IDs
+
+**Options**
+
+*   `-a, --all`: Restart all containers
+*   `-s, --signal <signal>`: Signal to send to the containers (default: SIGTERM)
+*   `-t, --time <time>`: Seconds to wait before killing the containers (default: 5)
+
+### `container port`
+
+Lists the published port mappings for a container. With no port argument, every mapping is printed as `<container-port>/<protocol> -> <host-address>:<host-port>`. When a private port (optionally with a protocol, e.g. `80/tcp`) is supplied, only the matching host binding(s) are printed.
+
+**Usage**
+
+```bash
+container port [--debug] <container-id> [<private-port>]
+```
+
+**Arguments**
+
+*   `<container-id>`: Container ID
+*   `<private-port>`: Filter to a private port, optionally with protocol (e.g. `80` or `80/tcp`)
+
 ### `container delete (rm)`
 
 Deletes one or more containers. If the container is running, you may force deletion with `--force`. Without a container ID, nothing happens unless `--all` is supplied.

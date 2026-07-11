@@ -149,8 +149,14 @@ result gets to full Docker parity for everyday single-container workflows.
 
 ### Phase 1 — CLI-only, no backend changes (low risk, fast wins)
 
-1. **`container restart`** — new `ContainerCommands/Container/ContainerRestart.swift`, composes `ContainerClient.stop(id:opts:)` then re-starts via the existing start path used by `ContainerStart`. Mirrors `ContainerStop`'s `--all`/`--time`/`--signal` flags.
-2. **`container port`** — new `ContainerCommands/Container/ContainerPort.swift`. Reads the container's stored publish specs (already captured at `create`/`run` time) via `ContainerClient.get(id:)`/inspect and prints them in `hostPort/proto -> containerPort` form.
+1. **`container restart`** — ✅ **implemented** in `ContainerCommands/Container/ContainerRestart.swift`; composes `ContainerClient.stop(id:opts:)` then re-starts via the detached path from `ContainerStart`. Mirrors `ContainerStop`'s `--all`/`--time`/`--signal` flags. Registered in `Application.swift`, documented in `docs/command-reference.md`.
+2. **`container port`** — ✅ **implemented** in `ContainerCommands/Container/ContainerPort.swift`; reads `configuration.publishedPorts` via `ContainerClient.get(id:)`, flattens `count` ranges, prints `containerPort/proto -> hostAddress:hostPort` (or filters by `PORT[/PROTO]`). Registered in `Application.swift`, documented, unit-tested (`Tests/ContainerCommandsTests/ContainerPortTests.swift`).
+
+> Note: implementation was authored against the observed source APIs but
+> **not compiled** — this repo targets macOS 15+ and depends on
+> Virtualization/XPC/Darwin, so it cannot build in the Linux CI sandbox used
+> for this change. A `swift build` + `swift test` on macOS is required before
+> merge.
 3. **`container system prune`** — new `ContainerCommands/System/SystemPrune.swift`. Fans out to the existing `ContainerPrune`, `ImagePrune`, `NetworkPrune`, `VolumePrune` logic (call the same underlying client methods each of those commands calls), gated by a confirmation prompt and `-f/--force`/`--volumes` flags to match Docker's UX.
 4. **`container image history`** — new `ContainerCommands/Image/ImageHistory.swift`, built from `ClientImage.config(for:)` which already returns the OCI `history` array; format as a table.
 5. **`container system info`** — new `ContainerCommands/System/SystemInfo.swift`, aggregates existing `SystemStatus`, `SystemVersion`, `SystemDF` data sources into one summary view.
