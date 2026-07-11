@@ -137,8 +137,10 @@ doc reaches for compose, just extended to the rest of the cluster surface):
   require its own research spike, not a straightforward CLI gap.
 - `docker trust`/`docker manifest` — Notary/manifest-list tooling; could be
   revisited later but isn't part of the core single-container workflow gap.
-- `docker compose` — tracked separately (§5), it's an orchestration tool
-  layered on top of the primitives here, not a `container` subcommand gap.
+- `docker compose` — **in scope**, but as its own orchestration effort with
+  a full design in Phase 5 / §4 item #19 (covers the popular
+  `docker compose -f … up --build` workflow). Listed here only to note it is
+  not a single-container primitive like the rest of §3.
 
 ## 4. Implementation plan
 
@@ -175,16 +177,108 @@ result gets to full Docker parity for everyday single-container workflows.
 17. **`container image search`** — registry search endpoint call; only meaningful against registries that implement a search API (Docker Hub does, most private registries don't). Should be additive and fail gracefully with a clear error for registries lacking the endpoint.
 18. **`container system events`** — needs a new pub/sub event bus for container/image/network/volume lifecycle events, plus a streaming CLI command (`container system events --since ... --filter ...`). This is the largest single addition in this plan — treat as its own design doc before implementation, since every existing command that mutates state (create/start/stop/kill/delete/pull/etc.) would need to publish to the bus.
 
-### Phase 5 — Orchestration (tracked from the uploaded research)
+### Phase 5 — Compose orchestration (tracked from the uploaded research)
 
-19. **`container compose`** — no native support exists today (confirmed both by this audit and by the uploaded `Apple_Container_Ecosystem_Summary.md`, which points at the third-party `Mcrich23/Container-Compose` as the only current bridge). If in-tree compose support is wanted, scope it as a separate design doc: a `docker-compose.yml` parser plus an orchestrator that maps services to sequenced `container build`/`container run`/`container network create`/`container volume create` calls, reusing Phases 1-3's primitives (especially `network connect`, `restart`, and `wait`) as building blocks. This is intentionally sequenced last because it depends on several Phase 1-3 primitives (particularly `wait`, `restart`, and dependency-ordered start/stop) being in place first.
+19. **`container compose`** — no native support exists today (confirmed both by this audit and by the uploaded `Apple_Container_Ecosystem_Summary.md`, which points at the third-party `Mcrich23/Container-Compose` as the only current bridge). This is the single most-requested "popular Docker command" — e.g. `docker compose -f docker-compose-prod.yml up --build` — so it gets a dedicated design below rather than a one-line entry.
+
+This is deliberately sequenced last because it *reuses* the earlier
+primitives (`wait` #6 for `depends_on` ordering, `restart` #1, `network
+connect` #8, `system events` #18 for `--watch`/log following) instead of
+reinventing them. A `compose` command that shipped before those would have
+to duplicate their logic.
+
+#### 19.1 Target invocation (must work end to end)
+
+```
+container compose -f docker-compose-prod.yml up --build
+```
+
+Broken down, the orchestrator must honor:
+
+- `-f, --file <path>` (repeatable) — parse the named compose file(s) instead of the default `./docker-compose.yml` / `compose.yml`. Also `-p/--project-name`, `--env-file`, `--profile`.
+- `up` — reconcile the whole file to a running state: create networks, create volumes, (re)build or pull images, then create + start every service container in `depends_on` order.
+- `--build` — force `container build` for every service that declares a `build:` section *before* starting it (default is build-if-missing).
+- Common `up` flags to cover: `-d/--detach`, `--force-recreate`, `--no-build`, `--no-deps`, `--remove-orphans`, `--wait` (block until healthy), `--pull`.
+
+#### 19.2 Project model (already supported by existing primitives)
+
+Docker Compose tags every resource with `com.docker.compose.project=<name>`
+so it can find them again for `ps`/`down`/`logs`. `container` **already has
+the two primitives this needs**, so no backend work is required for the
+project model itself:
+
+- **Set** labels at creation: `-l/--label` on run/create (`Flags.swift:280`).
+- **Find** them later by label: `ContainerListFilters.labels` supports
+  regex-matched label filtering (`ContainerListFilters.swift:34`), and
+  volumes already carry labels (`ClientVolume.create(..., labels:)`).
+
+So the orchestrator stamps every container/volume/network it creates with,
+e.g., `com.apple.container.compose.project=<project>` and
+`com.apple.container.compose.service=<service>`, and later selects a
+project's resources with a label filter. This is exactly how `down`, `ps`,
+`logs`, `stop`, and `restart --project` locate what they own.
+
+#### 19.3 Compose file → container primitive mapping
+
+| Compose key | Maps to | Backing primitive | Status |
+|---|---|---|---|
+| `services.<s>.image` | `container run <image>` | `ContainerClient.create`/`ContainerRun` | exists |
+| `services.<s>.build` | `container build -t <s> <ctx>` (forced when `--build`) | `BuildCommand` | exists |
+| `services.<s>.ports` | `-p host:container[/proto]` | `publishedPorts` | exists |
+| `services.<s>.volumes` (bind) | `-v/--mount` | mount flags | exists |
+| `services.<s>.volumes` (named) | `container volume create` + mount | `ClientVolume.create` | exists |
+| `services.<s>.environment` | `-e KEY=VALUE` | `--env` | exists |
+| `services.<s>.env_file` | `--env-file` | `--env-file` | exists |
+| `services.<s>.command` / `entrypoint` | positional args / `--entrypoint` | run args / `--entrypoint` | exists |
+| `services.<s>.networks` | `--network` at create (+ `network connect` for extras) | `--network` / #8 | partial (#8) |
+| `services.<s>.depends_on` | topological start order; block on readiness | `wait` (#6) | needs #6 |
+| `services.<s>.labels` | `-l/--label` (merged with project labels) | `--label` | exists |
+| `services.<s>.cpus` / `mem_limit` | `-c/--cpus`, `-m/--memory` | resource flags | exists |
+| `services.<s>.restart` | restart policy | **no restart-policy concept exists** | **gap — see 19.5** |
+| `services.<s>.healthcheck` | readiness gate for `depends_on: condition: service_healthy` | none today | **gap — see 19.5** |
+| top-level `networks` | `container network create` | `NetworkCreate` | exists (macOS 26+) |
+| top-level `volumes` | `container volume create` | `VolumeCreate` | exists |
+
+#### 19.4 `up --build` execution algorithm
+
+1. Parse `-f docker-compose-prod.yml` into a service graph; resolve `--env-file`/variable interpolation; derive the project name (`-p`, else the file's directory name).
+2. Create top-level `networks` and `volumes` that don't already exist (label them with the project).
+3. Topologically sort services by `depends_on` (error on cycles).
+4. Because `--build` is set, run `container build -t <project>_<service> <build.context>` for every service that has a `build:` section (services with only `image:` are pulled on first run).
+5. In dependency order, `create` + `start` each service container, stamped with project/service labels, wired to the project network, ports, volumes, env. For a dependency declared `condition: service_started`, proceed once started; for `service_healthy`, block on the healthcheck (see 19.5 gap); the generic ordering barrier reuses `container wait` (#6).
+6. If not `-d`, attach/stream aggregated logs (reusing `ContainerClient.logs`); on `--wait`, block until all are healthy/running.
+
+#### 19.5 Known limitations to call out in the design doc
+
+Two compose fields have **no backing primitive today** and must either be
+implemented first or explicitly documented as unsupported in v1:
+
+- **`restart:` policies** (`no`/`always`/`on-failure`/`unless-stopped`) — there is no restart-policy concept anywhere in `Sources/` (verified). v1 options: (a) document as unsupported, or (b) add a restart-policy field to `ContainerConfiguration` + a supervisor in the runtime. Recommend (a) for v1.
+- **`healthcheck:` + `depends_on: condition: service_healthy`** — no healthcheck subsystem exists. v1 can support `condition: service_started` (via `wait`/start ordering) and treat `service_healthy` as best-effort (fall back to started) with a clear warning, deferring true healthchecks to a later phase.
+- **`deploy:` / replicas / placement** — Swarm-oriented; out of scope (consistent with §3.8).
+- **`profiles:`** — supportable in the parser (`--profile` filter) with modest effort; include if cheap, else defer.
+
+#### 19.6 Compose subcommand priority
+
+Ship in this order so the headline workflow works first:
+
+1. **`up` (incl. `--build`), `down`, `build`, `ps`, `logs`** — the core loop, covers the requested `up --build` invocation and its teardown.
+2. `stop`, `start`, `restart`, `pull`, `config` (validate/render).
+3. `exec`, `run`, `kill`, `pause`/`unpause`, `top`, `cp`, `events` — thin wrappers over the single-container commands of the same name (several of which are themselves Phase 1-3 items, so these land naturally after those).
 
 ## 5. Suggested execution order
 
-Phase 1 → Phase 2 → Phase 3 → (Phase 4 and Phase 5 can proceed in parallel,
-since events and compose are independent efforts) once Phase 2's `wait` and
-`restart`-adjacent primitives exist, as compose dependency ordering needs
-`wait` to sequence `depends_on` correctly.
+Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5.
+
+Phase 5 (compose) is last on purpose: its `up --build` flow reuses Phase 1's
+`restart`, Phase 2's `wait` (#6, for `depends_on` ordering) and `network
+connect` (#8), and — for `compose events`/`--watch` — Phase 4's `system
+events` (#18). Building compose before those means duplicating their logic.
+Everything compose needs for the *headline* `up --build`/`down` loop except
+`depends_on` ordering already exists today (build, run, network/volume
+create, label-based project selection), so a minimal compose could ship
+right after Phase 2's `wait` lands if that workflow is prioritized ahead of
+Phase 3/4.
 
 Each numbered item above should land as its own PR: new command file(s)
 under `Sources/ContainerCommands/`, matching entry in
