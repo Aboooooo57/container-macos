@@ -165,6 +165,18 @@ result gets to full Docker parity for everyday single-container workflows.
 > APIs (OCI `History`/`Manifest` fields confirmed against the pinned
 > `containerization` 0.37.0 tag). Still **not compiled** — needs
 > `swift build && swift test` on macOS before merge, per the note above.
+>
+> **Test coverage.** Each command's real logic was extracted into pure static
+> helpers and unit-tested **without needing the daemon** (run with
+> `swift test --filter ContainerCommandsTests`):
+> - `restart` → `validate()` argument rules (`ContainerRestartTests`)
+> - `port` → `parsePortFilter`, `mappings` (range flattening), `filter`
+>   (`ContainerPortTests`)
+> - `system prune` → `confirmationWarning` flag wiring (`SystemPruneTests`)
+> - `system info` → `infoTable` field/row wiring, incl. a running/stopped
+>   swap guard (`SystemInfoTests`)
+> - `image history` → `buildEntries` (layer↔record mapping) and `truncate`
+>   (`ImageHistoryTests`)
 
 ### Phase 2 — Small backend additions (new XPC route, existing service processes)
 

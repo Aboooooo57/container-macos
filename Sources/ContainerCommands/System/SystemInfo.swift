@@ -126,7 +126,7 @@ extension Application {
             }
         }
 
-        private static func infoTable(_ info: Info) -> String {
+        static func infoTable(_ info: Info) -> String {
             let formatter = ByteCountFormatter()
             formatter.countStyle = .file
             let imagesSize = formatter.string(fromByteCount: Int64(info.imagesSizeInBytes))

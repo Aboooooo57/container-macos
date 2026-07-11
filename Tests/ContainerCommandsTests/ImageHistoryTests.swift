@@ -70,4 +70,25 @@ struct ImageHistoryTests {
         #expect(entries[0].createdBy == "RUN x")
         #expect(entries[0].comment == "hi")
     }
+
+    // MARK: - truncate
+
+    @Test
+    func shortStringIsNotTruncated() {
+        #expect(Application.ImageHistory.truncate("RUN apt-get update", to: 45) == "RUN apt-get update")
+    }
+
+    @Test
+    func longStringIsTruncatedWithEllipsis() {
+        let long = String(repeating: "x", count: 100)
+        let result = Application.ImageHistory.truncate(long, to: 45)
+        #expect(result.count == 45)
+        #expect(result.hasSuffix("…"))
+    }
+
+    @Test
+    func stringExactlyAtLimitIsUnchanged() {
+        let exact = String(repeating: "y", count: 45)
+        #expect(Application.ImageHistory.truncate(exact, to: 45) == exact)
+    }
 }

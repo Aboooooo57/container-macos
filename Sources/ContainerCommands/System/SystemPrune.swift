@@ -40,16 +40,21 @@ extension Application {
         @OptionGroup
         public var logOptions: Flags.Logging
 
+        /// Build the confirmation banner describing what will be removed.
+        static func confirmationWarning(all: Bool, volumes: Bool) -> String {
+            var warning = "WARNING! This will remove:\n"
+            warning += "  - all stopped containers\n"
+            warning += "  - all networks not used by at least one container\n"
+            warning += all ? "  - all images without at least one container associated to them\n" : "  - all dangling images\n"
+            if volumes {
+                warning += "  - all volumes not used by at least one container\n"
+            }
+            return warning
+        }
+
         public func run() async throws {
             if !force {
-                var warning = "WARNING! This will remove:\n"
-                warning += "  - all stopped containers\n"
-                warning += "  - all networks not used by at least one container\n"
-                warning += all ? "  - all images without at least one container associated to them\n" : "  - all dangling images\n"
-                if volumes {
-                    warning += "  - all volumes not used by at least one container\n"
-                }
-                print(warning, terminator: "")
+                print(Self.confirmationWarning(all: all, volumes: volumes), terminator: "")
                 print("Are you sure you want to continue? [y/N]: ", terminator: "")
                 guard let answer = readLine(strippingNewline: true), answer.lowercased() == "y" else {
                     log.info("system prune cancelled")

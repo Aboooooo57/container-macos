@@ -38,7 +38,7 @@ extension Application {
         var privatePort: String?
 
         /// A single flattened host <- container mapping.
-        private struct Mapping {
+        struct Mapping: Equatable {
             let containerPort: UInt16
             let proto: String
             let hostAddress: String
@@ -48,21 +48,7 @@ extension Application {
         public func run() async throws {
             let client = ContainerClient()
             let container = try await client.get(id: containerId)
-
-            // Flatten every published-port spec, expanding ranges described by `count`.
-            var mappings: [Mapping] = []
-            for published in container.configuration.publishedPorts {
-                for offset in 0..<published.count {
-                    mappings.append(
-                        Mapping(
-                            containerPort: published.containerPort + offset,
-                            proto: published.proto.rawValue,
-                            hostAddress: published.hostAddress.description,
-                            hostPort: published.hostPort + offset
-                        )
-                    )
-                }
-            }
+            let mappings = Self.mappings(from: container.configuration.publishedPorts)
 
             guard let privatePort else {
                 // No filter: print every mapping, `<container-port>/<proto> -> <host-address>:<host-port>`.
@@ -74,9 +60,7 @@ extension Application {
 
             // Filter form: `container port <id> <port>[/<proto>]` prints only the host binding(s).
             let (wantPort, wantProto) = try Self.parsePortFilter(privatePort)
-            let matches = mappings.filter {
-                $0.containerPort == wantPort && (wantProto == nil || $0.proto == wantProto)
-            }
+            let matches = Self.filter(mappings, port: wantPort, proto: wantProto)
             guard !matches.isEmpty else {
                 throw ContainerizationError(
                     .notFound,
@@ -86,6 +70,31 @@ extension Application {
             for mapping in matches {
                 print("\(mapping.hostAddress):\(mapping.hostPort)")
             }
+        }
+
+        /// Flatten published-port specs into individual mappings, expanding the
+        /// ranges described by each spec's `count`.
+        static func mappings(from publishedPorts: [PublishPort]) -> [Mapping] {
+            var result: [Mapping] = []
+            for published in publishedPorts {
+                for offset in 0..<published.count {
+                    result.append(
+                        Mapping(
+                            containerPort: published.containerPort + offset,
+                            proto: published.proto.rawValue,
+                            hostAddress: published.hostAddress.description,
+                            hostPort: published.hostPort + offset
+                        )
+                    )
+                }
+            }
+            return result
+        }
+
+        /// Select the mappings for a given container port, optionally constrained
+        /// to a protocol.
+        static func filter(_ mappings: [Mapping], port: UInt16, proto: String?) -> [Mapping] {
+            mappings.filter { $0.containerPort == port && (proto == nil || $0.proto == proto) }
         }
 
         /// Parse a `<port>` or `<port>/<proto>` filter argument.

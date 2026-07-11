@@ -127,7 +127,7 @@ extension Application {
             return TableOutput(rows: rows).format()
         }
 
-        private static func truncate(_ value: String, to length: Int) -> String {
+        static func truncate(_ value: String, to length: Int) -> String {
             guard value.count > length else {
                 return value
             }
