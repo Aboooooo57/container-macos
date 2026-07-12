@@ -295,6 +295,26 @@ container stop [--all] [--signal <signal>] [--time <time>] [--debug] [<container
 *   `-s, --signal <signal>`: Signal to send to the containers (default: SIGTERM)
 *   `-t, --time <time>`: Seconds to wait before killing the containers (default: 5)
 
+### `container wait`
+
+Blocks until one or more containers stop, then prints each container's exit code on its own line, in the order the containers were given.
+
+**Usage**
+
+```bash
+container wait [--debug] <container-ids> ...
+```
+
+**Arguments**
+
+*   `<container-ids>`: Container IDs
+
+**Options**
+
+No options.
+
+> Note: waiting targets the container's init process. Waiting on a container whose runtime has already been fully torn down may return an error rather than a cached exit code.
+
 ### `container kill`
 
 Immediately kills running containers by sending a signal (defaults to `KILL`). Use with caution: it does not allow for graceful shutdown.

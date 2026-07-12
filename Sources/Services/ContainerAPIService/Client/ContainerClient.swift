@@ -175,6 +175,27 @@ public struct ContainerClient: Sendable {
         }
     }
 
+    /// Wait for the container's init process to exit, returning its exit code.
+    ///
+    /// The init process shares the container's identifier, so this waits on the
+    /// container as a whole. Blocks until the process exits.
+    public func wait(id: String) async throws -> Int32 {
+        do {
+            let request = XPCMessage(route: .containerWait)
+            request.set(key: .id, value: id)
+            request.set(key: .processIdentifier, value: id)
+
+            let response = try await xpcClient.send(request)
+            return Int32(response.int64(key: .exitCode))
+        } catch {
+            throw ContainerizationError(
+                .internalError,
+                message: "failed to wait for container",
+                cause: error
+            )
+        }
+    }
+
     /// Stop the container and all processes currently executing inside.
     public func stop(id: String, opts: ContainerStopOptions = ContainerStopOptions.default) async throws {
         do {

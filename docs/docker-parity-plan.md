@@ -180,7 +180,24 @@ result gets to full Docker parity for everyday single-container workflows.
 
 ### Phase 2 — Small backend additions (new XPC route, existing service processes)
 
-6. **`container wait`** — extend `ContainerAPIService` with an XPC route that returns a running container's exit code (mirrors `ClientProcess.wait()`, but for the container's init process rather than an exec'd one). CLI: `ContainerCommands/Container/ContainerWait.swift`.
+6. **`container wait`** — ✅ **implemented**. During implementation the audit found the `containerWait` XPC route **already exists and is registered** (`XPC+.swift`, `APIServer+Start.swift:303`), and the init process shares the container ID (`ContainersService.swift:598`; `kill` uses `processIdentifier = id`). So **no new route was needed** — only a `ContainerClient.wait(id:)` method (reusing the route with `processIdentifier = id`) and a `ContainerCommands/Container/ContainerWait.swift` command that waits on each container and prints its exit code, `docker wait`-style. Registered, documented, validate() unit-tested. Known limit: waiting on a container whose runtime is already gone may error rather than return a cached code.
+
+> **Remaining Phase 2 items (#7-#10) are genuinely multi-layer** — each needs
+> a *new* XPC route plus a server-side handler (and for some, runtime/plugin
+> changes), unlike #6 which reused existing plumbing. They are best done one
+> at a time with a compile/test cycle in the loop rather than authored blind.
+> Difficulty, hardest last:
+> - **#9 `image import`** — new `imageImport` route + server handler to turn a
+>   rootfs tarball into a layer/config/manifest. Self-contained (image service
+>   only), no runtime changes. *Most tractable of the four.*
+> - **#7 `rename`** — new route + re-keying the container store. Complicated
+>   because the container ID *is* the identity: it's the store key and appears
+>   in the launchd service label (`container-runtime-linux.<id>`), so a rename
+>   is really a re-register. Needs care to avoid orphaning a running container.
+> - **#10 `builder prune`** — BuildKit cache GC through the builder VM's gRPC
+>   (`container-builder-shim`); requires visibility into that gRPC surface.
+> - **#8 `network connect`/`disconnect`** — hot-plug a NIC into a *running* VM;
+>   hardest, and gated to macOS 26. *Do last.*
 7. **`container rename`** — add a `rename(id:newName:)` method to `ContainerClient`/server that updates the container's stored name/ID mapping without touching its running state. CLI: `ContainerCommands/Container/ContainerRename.swift`. Needs care around ID uniqueness checks already enforced at `create`.
 8. **`container network connect` / `disconnect`** — extend `Services/Network` server to support attaching/detaching a network interface on a live container (today network attachment is fixed at container-create time in `ContainerCreate.swift`/`ContainerRun.swift`). CLI: `ContainerCommands/Network/NetworkConnect.swift`, `NetworkDisconnect.swift`. **Must be added under the existing `#available(macOS 26)` gate** that guards the whole `network` group (see §2).
 9. **`container image import`** — extend `ContainerImagesService` with an "import raw rootfs tarball as image layer" path alongside the existing `load` (OCI archive) path. CLI: `ContainerCommands/Image/ImageImport.swift`.
