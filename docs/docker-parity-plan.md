@@ -182,22 +182,44 @@ result gets to full Docker parity for everyday single-container workflows.
 
 6. **`container wait`** — ✅ **implemented**. During implementation the audit found the `containerWait` XPC route **already exists and is registered** (`XPC+.swift`, `APIServer+Start.swift:303`), and the init process shares the container ID (`ContainersService.swift:598`; `kill` uses `processIdentifier = id`). So **no new route was needed** — only a `ContainerClient.wait(id:)` method (reusing the route with `processIdentifier = id`) and a `ContainerCommands/Container/ContainerWait.swift` command that waits on each container and prints its exit code, `docker wait`-style. Registered, documented, validate() unit-tested. Known limit: waiting on a container whose runtime is already gone may error rather than return a cached code.
 
-> **Remaining Phase 2 items (#7-#10) are genuinely multi-layer** — each needs
-> a *new* XPC route plus a server-side handler (and for some, runtime/plugin
-> changes), unlike #6 which reused existing plumbing. They are best done one
-> at a time with a compile/test cycle in the loop rather than authored blind.
-> Difficulty, hardest last:
-> - **#9 `image import`** — new `imageImport` route + server handler to turn a
->   rootfs tarball into a layer/config/manifest. Self-contained (image service
->   only), no runtime changes. *Most tractable of the four.*
-> - **#7 `rename`** — new route + re-keying the container store. Complicated
->   because the container ID *is* the identity: it's the store key and appears
->   in the launchd service label (`container-runtime-linux.<id>`), so a rename
->   is really a re-register. Needs care to avoid orphaning a running container.
-> - **#10 `builder prune`** — BuildKit cache GC through the builder VM's gRPC
->   (`container-builder-shim`); requires visibility into that gRPC surface.
-> - **#8 `network connect`/`disconnect`** — hot-plug a NIC into a *running* VM;
->   hardest, and gated to macOS 26. *Do last.*
+> **Remaining Phase 2 items (#7-#10): source audit revised their difficulty
+> sharply upward.** None is the "small addition" first assumed — each is
+> blocked on a missing primitive, an upstream change, or a schema change.
+> Findings (with evidence):
+>
+> - **#9 `image import`** — *feasible but large, not small.* There is **no
+>   high-level "create image from a rootfs tarball" primitive**:
+>   `ImageStore.ImportOperation.import` (Containerization 0.37.0) is
+>   pull-machinery (fetches blobs referenced by a manifest), not Docker
+>   `import`. A real implementation must hand-build the OCI artifacts —
+>   compute the layer diffID (sha256 of the uncompressed tar) and gzipped
+>   layer digest, synthesize an OCI `Image` config and `Manifest`, assemble an
+>   OCI layout, and feed it through the existing `imageLoad` path. Doable
+>   entirely client-side (reusing `ClientImage.load`), so **no new XPC route**,
+>   but it reimplements a chunk of OCI image construction and needs careful
+>   digest/gzip/JSON work. Effectively Phase-3 sized.
+> - **#7 `rename`** — *needs a schema change first.* The container **name IS
+>   its ID** (`--name` "Use the specified name as the container ID"), the
+>   bundle directory is `containerRoot/<id>` (`ContainersService.swift:238`),
+>   and the running-container launchd label is `container-runtime-linux.<id>`.
+>   There is no separate mutable name field, so `rename` can't just update a
+>   label — it would require introducing a name/ID split across the config,
+>   store, and runtime, then reworking every lookup. A design change, not a
+>   command.
+> - **#10 `builder prune`** — *blocked upstream.* The builder gRPC surface
+>   (`Builder.grpc.swift`) exposes only `createBuild` and `performBuild` — **no
+>   prune / GC / disk-usage RPC exists**. Implementing this requires adding an
+>   RPC to the separate `container-builder-shim` project first; it cannot be
+>   done from this repo alone.
+> - **#8 `network connect`/`disconnect`** — *hardest, likely needs new runtime
+>   capability.* Hot-plugging a NIC into a **running** VM has no existing
+>   primitive, and the whole network group is macOS-26-only. Do last, if at
+>   all.
+>
+> **Recommendation:** of the four, only **#9 `image import`** is implementable
+> within this repo without an upstream or schema change — treat it as a small
+> project (build/test loop, its own PR). #7 and #8 should be re-scoped as
+> design work; #10 should be filed upstream against `container-builder-shim`.
 7. **`container rename`** — add a `rename(id:newName:)` method to `ContainerClient`/server that updates the container's stored name/ID mapping without touching its running state. CLI: `ContainerCommands/Container/ContainerRename.swift`. Needs care around ID uniqueness checks already enforced at `create`.
 8. **`container network connect` / `disconnect`** — extend `Services/Network` server to support attaching/detaching a network interface on a live container (today network attachment is fixed at container-create time in `ContainerCreate.swift`/`ContainerRun.swift`). CLI: `ContainerCommands/Network/NetworkConnect.swift`, `NetworkDisconnect.swift`. **Must be added under the existing `#available(macOS 26)` gate** that guards the whole `network` group (see §2).
 9. **`container image import`** — extend `ContainerImagesService` with an "import raw rootfs tarball as image layer" path alongside the existing `load` (OCI archive) path. CLI: `ContainerCommands/Image/ImageImport.swift`.
