@@ -51,13 +51,19 @@ extension Application.ComposeCommand {
                 explicit: projectName, fileName: compose.name, composePath: path)
             let order = try Application.ComposeCommand.topologicalOrder(services: compose.services)
 
-            // Create named volumes up front (idempotent; ignore "already exists").
-            for name in (compose.volumes ?? [:]).keys.sorted() {
-                _ = try? Application.ComposeCommand.runContainerCLI(["volume", "create", name])
+            let declaredVolumes = Set((compose.volumes ?? [:]).keys)
+
+            // Warn once about Compose keys that have no `container` equivalent yet.
+            Application.ComposeCommand.warnUnsupported(services: compose.services, log: log)
+
+            // Create named volumes up front, project-prefixed (idempotent).
+            for name in declaredVolumes.sorted() {
+                let prefixed = Application.ComposeCommand.prefixedVolume(project: project, volume: name)
+                _ = try? Application.ComposeCommand.runContainerCLI(["volume", "create", prefixed])
             }
 
-            // v1 relies on default networking; custom networks (macOS 26 only)
-            // are not created yet.
+            // v2 still relies on default networking; custom networks (macOS 26
+            // only) are not created yet.
 
             for service in order {
                 guard let spec = compose.services[service] else { continue }
@@ -70,7 +76,8 @@ extension Application.ComposeCommand {
 
                 print("Starting \(service)...")
                 try Application.ComposeCommand.runContainerCLI(
-                    Application.ComposeCommand.runArguments(project: project, service: service, spec: spec))
+                    Application.ComposeCommand.runArguments(
+                        project: project, service: service, spec: spec, namedVolumes: declaredVolumes))
             }
 
             print("Started project '\(project)' (\(order.count) service(s))")

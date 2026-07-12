@@ -63,7 +63,8 @@ extension Application.ComposeCommand {
 
             if volumes {
                 for name in (compose.volumes ?? [:]).keys.sorted() {
-                    _ = try? Application.ComposeCommand.runContainerCLI(["volume", "delete", name])
+                    let prefixed = Application.ComposeCommand.prefixedVolume(project: project, volume: name)
+                    _ = try? Application.ComposeCommand.runContainerCLI(["volume", "delete", prefixed])
                 }
             }
 

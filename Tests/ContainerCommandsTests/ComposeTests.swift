@@ -125,17 +125,93 @@ struct ComposeTests {
     func runArgumentsForImageService() throws {
         let file = try ComposeFile.parse(sample)
         let db = try #require(file.services["db"])
-        let args = Application.ComposeCommand.runArguments(project: "proj", service: "db", spec: db)
+        let args = Application.ComposeCommand.runArguments(
+            project: "proj", service: "db", spec: db, namedVolumes: ["data"])
         #expect(
             args == [
                 "run", "-d",
                 "--name", "proj-db",
                 "--label", "com.apple.container.compose.project=proj",
                 "--label", "com.apple.container.compose.service=db",
-                "-v", "data:/var/lib/postgresql/data",
+                "-v", "proj_data:/var/lib/postgresql/data",  // named volume gets project-prefixed
                 "-e", "POSTGRES_PASSWORD=secret",
                 "postgres:16",
             ])
+    }
+
+    // MARK: - v2 key mapping
+
+    @Test
+    func mapsExtendedRunKeys() throws {
+        let yaml = """
+            services:
+              app:
+                image: myapp
+                cap_add: [NET_ADMIN]
+                cap_drop: [MKNOD]
+                dns: 1.1.1.1
+                dns_search: example.com
+                tmpfs: /run
+                shm_size: 128m
+                mem_limit: 512m
+                read_only: true
+                init: true
+                platform: linux/arm64
+            """
+        let app = try #require(try ComposeFile.parse(yaml).services["app"])
+        let args = Application.ComposeCommand.runArguments(project: "p", service: "app", spec: app)
+        #expect(contains(args, "--cap-add", "NET_ADMIN"))
+        #expect(contains(args, "--cap-drop", "MKNOD"))
+        #expect(contains(args, "--dns", "1.1.1.1"))
+        #expect(contains(args, "--dns-search", "example.com"))
+        #expect(contains(args, "--tmpfs", "/run"))
+        #expect(contains(args, "--shm-size", "128m"))
+        #expect(contains(args, "-m", "512m"))
+        #expect(args.contains("--read-only"))
+        #expect(args.contains("--init"))
+        #expect(contains(args, "--platform", "linux/arm64"))
+    }
+
+    @Test
+    func skipsFractionalCpus() throws {
+        let yaml = """
+            services:
+              a: { image: x, cpus: 0.5 }
+              b: { image: y, cpus: 2 }
+            """
+        let file = try ComposeFile.parse(yaml)
+        let a = Application.ComposeCommand.runArguments(project: "p", service: "a", spec: try #require(file.services["a"]))
+        let b = Application.ComposeCommand.runArguments(project: "p", service: "b", spec: try #require(file.services["b"]))
+        #expect(!a.contains("-c"))  // fractional cpus skipped
+        #expect(contains(b, "-c", "2"))
+    }
+
+    // MARK: - Volume reference mapping
+
+    @Test
+    func mapsNamedVolumeReference() {
+        let mapped = Application.ComposeCommand.mapVolumeReference(
+            "data:/var/lib/db", project: "proj", namedVolumes: ["data"])
+        #expect(mapped == "proj_data:/var/lib/db")
+    }
+
+    @Test
+    func passesThroughBindMount() {
+        let mapped = Application.ComposeCommand.mapVolumeReference(
+            "./local:/app", project: "proj", namedVolumes: ["data"])
+        #expect(mapped == "./local:/app")
+    }
+
+    @Test
+    func passesThroughAnonymousVolume() {
+        let mapped = Application.ComposeCommand.mapVolumeReference(
+            "/data", project: "proj", namedVolumes: ["data"])
+        #expect(mapped == "/data")
+    }
+
+    /// Returns true if `flag` appears immediately followed by `value` in `args`.
+    private func contains(_ args: [String], _ flag: String, _ value: String) -> Bool {
+        zip(args, args.dropFirst()).contains { $0 == flag && $1 == value }
     }
 
     @Test

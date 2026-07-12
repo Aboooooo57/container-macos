@@ -1084,13 +1084,14 @@ The compose commands run multi-container applications defined in a Docker Compos
 
 Every resource a project creates is labelled `com.apple.container.compose.project=<project>` so `down`/`ps` can find it again. The project name defaults to the compose file's parent directory (override with `-p`).
 
-**Supported Compose keys:** `services` (`image`, `build` [string or `{context, dockerfile}`], `command`, `entrypoint`, `ports`, `volumes`, `environment` [list or map], `env_file`, `depends_on` [list or map], `container_name`, `labels`, `working_dir`, `user`), and top-level `volumes`.
+**Supported Compose keys:** `services` (`image`, `build` [string or `{context, dockerfile}`], `command`, `entrypoint`, `ports`, `volumes`, `environment` [list or map], `env_file`, `depends_on` [list or map], `container_name`, `labels`, `working_dir`, `user`, `cap_add`, `cap_drop`, `dns`, `dns_search`, `tmpfs`, `shm_size`, `mem_limit`, `cpus`, `read_only`, `init`, `platform`), and top-level `volumes` (created project-prefixed). See [`compose-dockerfile-coverage.md`](compose-dockerfile-coverage.md) for the full key-by-key coverage matrix.
 
-**v1 limitations:**
+**Limitations:**
 *   `up` always runs services detached; it does not stream aggregated logs.
 *   `depends_on` controls start order only (`service_started`); health-gated conditions are treated as best-effort.
-*   `restart:` policies and `healthcheck:` are not applied.
-*   Custom `networks:` are not created (services use default networking); named `volumes` are created by their bare name (not project-prefixed).
+*   `restart:` policies and `healthcheck:` are not applied (a warning is emitted when they are present).
+*   Custom `networks:` are not created (services use default networking).
+*   `cpus` accepts whole numbers only; fractional values are skipped.
 
 ### `container compose up`
 

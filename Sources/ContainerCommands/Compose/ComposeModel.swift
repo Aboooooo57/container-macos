@@ -139,6 +139,20 @@ struct ComposeService: Codable {
     var restart: String?
     var workingDir: String?
     var user: String?
+    // v2 additions: keys that map to a `container run` flag.
+    var capAdd: [String]?
+    var capDrop: [String]?
+    var dns: StringOrList?
+    var dnsSearch: StringOrList?
+    var tmpfs: StringOrList?
+    var shmSize: ComposeScalar?
+    var readOnly: Bool?
+    var initEnabled: Bool?
+    var memLimit: ComposeScalar?
+    var cpus: ComposeScalar?
+    var platform: String?
+    // Parsed for warnings only (no `container` equivalent yet).
+    var healthcheck: ComposeResourceStub?
 
     enum CodingKeys: String, CodingKey {
         case image, build, command, entrypoint, ports, volumes, environment
@@ -148,6 +162,16 @@ struct ComposeService: Codable {
         case labels, restart
         case workingDir = "working_dir"
         case user
+        case capAdd = "cap_add"
+        case capDrop = "cap_drop"
+        case dns
+        case dnsSearch = "dns_search"
+        case tmpfs
+        case shmSize = "shm_size"
+        case readOnly = "read_only"
+        case initEnabled = "init"
+        case memLimit = "mem_limit"
+        case cpus, platform, healthcheck
     }
 }
 

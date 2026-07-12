@@ -18,6 +18,7 @@ import ArgumentParser
 import ContainerAPIClient
 import ContainerizationError
 import Foundation
+import Logging
 import SystemPackage
 
 extension Application {
@@ -153,8 +154,31 @@ extension Application {
             return args
         }
 
+        /// Rewrite a service volume reference so that references to a declared
+        /// named volume are prefixed with the project (`data:/x` -> `proj_data:/x`);
+        /// bind mounts and anonymous volumes pass through unchanged.
+        static func mapVolumeReference(_ reference: String, project: String, namedVolumes: Set<String>) -> String {
+            let parts = reference.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
+            guard parts.count >= 2 else {
+                return reference
+            }
+            let source = String(parts[0])
+            guard namedVolumes.contains(source) else {
+                return reference
+            }
+            let rest = parts.dropFirst().joined(separator: ":")
+            return "\(prefixedVolume(project: project, volume: source)):\(rest)"
+        }
+
+        /// The concrete volume name a project's named volume is created under.
+        static func prefixedVolume(project: String, volume: String) -> String {
+            "\(sanitize(project))_\(volume)"
+        }
+
         /// `container run -d` arguments for a service, tagged with project labels.
-        static func runArguments(project: String, service: String, spec: ComposeService) -> [String] {
+        static func runArguments(
+            project: String, service: String, spec: ComposeService, namedVolumes: Set<String> = []
+        ) -> [String] {
             var args = ["run", "-d"]
             let name = spec.containerName ?? "\(project)-\(service)"
             args += ["--name", name]
@@ -167,13 +191,48 @@ extension Application {
                 args += ["-p", port]
             }
             for volume in spec.volumes ?? [] {
-                args += ["-v", volume]
+                args += ["-v", mapVolumeReference(volume, project: project, namedVolumes: namedVolumes)]
             }
             for env in spec.environment?.pairs ?? [] {
                 args += ["-e", env]
             }
             for envFile in spec.envFile?.values ?? [] {
                 args += ["--env-file", envFile]
+            }
+            for cap in spec.capAdd ?? [] {
+                args += ["--cap-add", cap]
+            }
+            for cap in spec.capDrop ?? [] {
+                args += ["--cap-drop", cap]
+            }
+            for nameserver in spec.dns?.values ?? [] {
+                args += ["--dns", nameserver]
+            }
+            for domain in spec.dnsSearch?.values ?? [] {
+                args += ["--dns-search", domain]
+            }
+            for tmpfs in spec.tmpfs?.values ?? [] {
+                args += ["--tmpfs", tmpfs]
+            }
+            if let shmSize = spec.shmSize?.string {
+                args += ["--shm-size", shmSize]
+            }
+            if let memory = spec.memLimit?.string {
+                args += ["-m", memory]
+            }
+            // container's `--cpus` is an integer count; skip fractional values
+            // rather than failing the whole `up`.
+            if let cpus = spec.cpus?.string, Int64(cpus) != nil {
+                args += ["-c", cpus]
+            }
+            if let platform = spec.platform {
+                args += ["--platform", platform]
+            }
+            if spec.readOnly == true {
+                args.append("--read-only")
+            }
+            if spec.initEnabled == true {
+                args.append("--init")
             }
             if let workingDir = spec.workingDir {
                 args += ["-w", workingDir]
@@ -189,6 +248,25 @@ extension Application {
                 args += command
             }
             return args
+        }
+
+        // MARK: - Unsupported-key warnings
+
+        /// Emit a one-time warning for each Compose key present in the file that
+        /// `container` cannot yet honor, so behavior is never silently wrong.
+        static func warnUnsupported(services: [String: ComposeService], log: Logger) {
+            var warnings: Set<String> = []
+            for spec in services.values {
+                if spec.restart != nil {
+                    warnings.insert("`restart:` policies are not applied — containers are not automatically restarted")
+                }
+                if spec.healthcheck != nil {
+                    warnings.insert("`healthcheck:` is not executed — there is no health-check subsystem")
+                }
+            }
+            for warning in warnings.sorted() {
+                log.warning("compose: \(warning)")
+            }
         }
 
         // MARK: - Subprocess reuse of the running `container` binary
