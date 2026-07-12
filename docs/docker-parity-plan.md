@@ -349,3 +349,76 @@ under `Sources/ContainerCommands/`, matching entry in
 `docs/command-reference.md`, and integration test(s) under `Tests/` following
 the existing per-command test pattern (see `Tests/` for current
 `Container*`/`Image*` command coverage) before moving to the next item.
+
+## 6. Roadmap: making `container` behave like Docker (Phase 3 & 4)
+
+After Phase 1–2 and Compose v2, the CLI covers most single-container
+operations and the headline compose workflow. What remains splits cleanly into
+two tracks: **Track A** finishes the surface (thin, low-risk work that reuses
+proven commands), and **Track B** adds the runtime *behaviors* that make Docker
+feel like Docker (health checks, restart policies, events). Track B is where
+the keys we currently only *warn* about (`HEALTHCHECK`, `restart:`,
+`service_healthy`) become real.
+
+Legend: **Effort** S/M/L · **Risk** low/med/high · reuse = builds on an
+already-shipped/tested primitive.
+
+### Track A — Complete the surface (low risk, high polish)
+
+| # | Item | Approach | Reuses | Effort | Risk |
+|---|---|---|---|---|---|
+| A1 | `compose logs` (+ `-f`) | Find project containers by label, fan out to `container logs` | `ContainerLogs`, label filter | S | low |
+| A2 | `compose exec` | Resolve `<project>-<service>` → `container exec` | `ContainerExec` | S | low |
+| A3 | `compose stop` / `start` / `restart` | Label-filter project containers → existing `stop`/`start`/`restart` | Phase 1 `restart`, `stop`, `start` | S | low |
+| A4 | `compose pull` | For each service image → `container image pull` | `ImagePull` | S | low |
+| A5 | `compose config` | Parse + re-emit the resolved Compose file (validate) | Yams (already used) | S | low |
+| A6 | `container top` | `exec ps -ef` in the container, format the output | `ContainerExec` (confirmed runs arbitrary cmds) | S | low |
+| A7 | `image import` | Build an OCI image from a rootfs tarball client-side, feed the existing `imageLoad` path | `ClientImage.load`, fetched OCI types | M | med |
+| A8 | Docker aliases | Top-level `docker ps`/`images`/`login`/`logout`; `-P` publish-all-exposed | existing list/registry/run | S | low |
+
+Track A needs **no new XPC routes** and no runtime changes — every item is a
+CLI command that orchestrates existing, tested commands. Ship each as its own
+change with unit tests for the pure logic (arg construction, parsing), verified
+through the standard build/test loop.
+
+### Track B — Runtime subsystems (high impact, real engineering)
+
+These are the "behaves like Docker" features. Each is its own design doc +
+iteration cycle; they touch the daemon/runtime, not just the CLI.
+
+**B1 — Health checks** *(unlocks the most; do first)*
+- Periodically run a container's `HEALTHCHECK` (`exec` already exists) and
+  track a health status (`starting`/`healthy`/`unhealthy`) on the container.
+- Surfaces in `container ls`/`inspect`, and lets Compose honor
+  `depends_on: { condition: service_healthy }` and Dockerfile `HEALTHCHECK`.
+- Needs: a periodic scheduler in the runtime/service, a health field on the
+  container snapshot, and CLI plumbing. Effort L, risk med.
+
+**B2 — Restart policies**
+- A daemon-side supervisor that observes container exit and restarts per policy
+  (`no`/`on-failure[:max]`/`always`/`unless-stopped`).
+- Unlocks `container run --restart` and Compose `restart:`.
+- Needs: a restart-policy field on `ContainerConfiguration`, an exit watcher
+  in the runtime service, and backoff logic. Effort L, risk med/high (must not
+  fight `stop`/`delete`).
+
+**B3 — `system events`**
+- A lifecycle event stream (`create`/`start`/`stop`/`die`/`destroy`/image
+  pulls), with `--since`/`--filter` and streaming output.
+- **Partial plumbing already exists**: a `containerEvent` XPC route/key is
+  defined (`XPC+.swift`), so this is likely less than a from-scratch build —
+  investigate what already emits events before designing. Effort M/L, risk med.
+
+### Recommended sequence
+
+1. **Track A in order A1→A8** — finishes compose into a complete tool and
+   clears the easy command gaps quickly and safely.
+2. **B1 health checks** — highest leverage: turns three currently-warned keys
+   (`HEALTHCHECK`, `service_healthy`, and the readiness half of `depends_on`)
+   into working features.
+3. **B2 restart policies**, then **B3 events**.
+
+Items still blocked outside this repo (unchanged from §4): `builder prune`
+(needs an upstream `container-builder-shim` RPC), `rename` (needs a name/ID
+schema split), and `network connect`/`disconnect` (runtime NIC hot-plug,
+macOS 26). Track these as upstream/design issues, not Phase 3/4 work.
