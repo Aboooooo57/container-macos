@@ -63,7 +63,7 @@ extension Application.ComposeCommand {
 
             if volumes {
                 for name in (compose.volumes ?? [:]).keys.sorted() {
-                    try? Application.ComposeCommand.runContainerCLI(["volume", "delete", name])
+                    _ = try? Application.ComposeCommand.runContainerCLI(["volume", "delete", name])
                 }
             }
 

@@ -53,7 +53,7 @@ extension Application.ComposeCommand {
 
             // Create named volumes up front (idempotent; ignore "already exists").
             for name in (compose.volumes ?? [:]).keys.sorted() {
-                try? Application.ComposeCommand.runContainerCLI(["volume", "create", name])
+                _ = try? Application.ComposeCommand.runContainerCLI(["volume", "create", name])
             }
 
             // v1 relies on default networking; custom networks (macOS 26 only)
