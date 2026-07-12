@@ -1078,6 +1078,74 @@ container volume inspect [--debug] <names> ...
 
 No options.
 
+## Compose
+
+The compose commands run multi-container applications defined in a Docker Compose file, mapping each service onto native `container` commands. This is a v1 with intentional limitations (see below).
+
+Every resource a project creates is labelled `com.apple.container.compose.project=<project>` so `down`/`ps` can find it again. The project name defaults to the compose file's parent directory (override with `-p`).
+
+**Supported Compose keys:** `services` (`image`, `build` [string or `{context, dockerfile}`], `command`, `entrypoint`, `ports`, `volumes`, `environment` [list or map], `env_file`, `depends_on` [list or map], `container_name`, `labels`, `working_dir`, `user`), and top-level `volumes`.
+
+**v1 limitations:**
+*   `up` always runs services detached; it does not stream aggregated logs.
+*   `depends_on` controls start order only (`service_started`); health-gated conditions are treated as best-effort.
+*   `restart:` policies and `healthcheck:` are not applied.
+*   Custom `networks:` are not created (services use default networking); named `volumes` are created by their bare name (not project-prefixed).
+
+### `container compose up`
+
+Creates and starts every service, in `depends_on` order. Builds images first for services with a `build:` section when `--build` is given (or when they declare no `image:`).
+
+**Usage**
+
+```bash
+container compose up [--file <path>] [--project-name <name>] [--build] [--no-build] [--detach] [--debug]
+```
+
+**Options**
+
+*   `-f, --file <path>`: Path to a Compose file (defaults to `compose.yaml`/`compose.yml`/`docker-compose.yaml`/`docker-compose.yml`)
+*   `-p, --project-name <name>`: Project name (defaults to the compose file's directory)
+*   `--build`: Build images before starting the services
+*   `--no-build`: Do not build, even if a service defines a build section
+*   `-d, --detach`: Run in the background (v1 always detaches; accepted for compatibility)
+
+### `container compose down`
+
+Stops and removes all of the project's containers (found by project label).
+
+**Usage**
+
+```bash
+container compose down [--file <path>] [--project-name <name>] [--volumes] [--debug]
+```
+
+**Options**
+
+*   `-f, --file <path>`: Path to a Compose file
+*   `-p, --project-name <name>`: Project name
+*   `-v, --volumes`: Also remove named volumes declared in the Compose file
+
+### `container compose ps`
+
+Lists the project's containers.
+
+**Usage**
+
+```bash
+container compose ps [--file <path>] [--project-name <name>] [--debug]
+```
+
+### `container compose build`
+
+Builds images for services that define a `build:` section.
+
+**Usage**
+
+```bash
+container compose build [--file <path>] [--project-name <name>] [--debug]
+```
+
 ## Registry Management
 
 The registry commands manage authentication and defaults for container registries.
