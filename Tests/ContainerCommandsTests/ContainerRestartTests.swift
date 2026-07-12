@@ -19,36 +19,35 @@ import Testing
 
 @testable import ContainerCommands
 
+// Commands are exercised through ArgumentParser's `parse`, which populates the
+// argument property wrappers (including defaults). Reading those wrappers on a
+// hand-constructed command is unsupported and traps.
 struct ContainerRestartTests {
     @Test
     func rejectsNoContainersAndNoAll() {
-        let cmd = Application.ContainerRestart()
         #expect(throws: (any Error).self) {
+            let cmd = try Application.ContainerRestart.parse([])
             try cmd.validate()
         }
     }
 
     @Test
     func rejectsExplicitIdsWithAll() {
-        var cmd = Application.ContainerRestart()
-        cmd.all = true
-        cmd.containerIds = ["web"]
         #expect(throws: (any Error).self) {
+            let cmd = try Application.ContainerRestart.parse(["--all", "web"])
             try cmd.validate()
         }
     }
 
     @Test
     func acceptsExplicitIds() throws {
-        var cmd = Application.ContainerRestart()
-        cmd.containerIds = ["web", "db"]
+        let cmd = try Application.ContainerRestart.parse(["web", "db"])
         try cmd.validate()  // should not throw
     }
 
     @Test
     func acceptsAllFlagAlone() throws {
-        var cmd = Application.ContainerRestart()
-        cmd.all = true
+        let cmd = try Application.ContainerRestart.parse(["--all"])
         try cmd.validate()  // should not throw
     }
 }
