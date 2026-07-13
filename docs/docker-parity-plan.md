@@ -390,7 +390,7 @@ through the standard build/test loop.
 These are the "behaves like Docker" features. Each is its own design doc +
 iteration cycle; they touch the daemon/runtime, not just the CLI.
 
-**B1 — Health checks** *(unlocks the most; do first)*
+**B1 — Health checks** *(unlocks the most; do first)* — 📄 **full design in [`health-check-design.md`](health-check-design.md)** (staged B1.1–B1.5, scoped against the source).
 - Periodically run a container's `HEALTHCHECK` (`exec` already exists) and
   track a health status (`starting`/`healthy`/`unhealthy`) on the container.
 - Surfaces in `container ls`/`inspect`, and lets Compose honor
