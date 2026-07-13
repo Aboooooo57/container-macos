@@ -45,6 +45,9 @@ extension Application.ComposeCommand {
         @Argument(parsing: .captureForPassthrough, help: "Command and arguments to run")
         var command: [String]
 
+        @OptionGroup
+        public var logOptions: Flags.Logging
+
         public func run() async throws {
             let (compose, path) = try Application.ComposeCommand.load(explicitFile: file)
             let project = Application.ComposeCommand.projectName(
