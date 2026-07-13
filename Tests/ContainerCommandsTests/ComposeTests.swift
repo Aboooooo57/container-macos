@@ -209,6 +209,43 @@ struct ComposeTests {
         #expect(mapped == "/data")
     }
 
+    // MARK: - Service → container name
+
+    @Test
+    func containerNameDefaultsToProjectService() throws {
+        let file = try ComposeFile.parse(sample)
+        let web = try #require(file.services["web"])
+        #expect(Application.ComposeCommand.containerName(project: "demo", service: "web", spec: web) == "demo-web")
+    }
+
+    @Test
+    func containerNameHonorsContainerNameKey() throws {
+        let yaml = """
+            services:
+              web:
+                image: nginx
+                container_name: my-web
+            """
+        let web = try #require(try ComposeFile.parse(yaml).services["web"])
+        #expect(Application.ComposeCommand.containerName(project: "demo", service: "web", spec: web) == "my-web")
+    }
+
+    // MARK: - exec arguments
+
+    @Test
+    func execArgumentsPlain() {
+        let args = Application.ComposeCommand.execArguments(
+            containerName: "demo-web", interactive: false, tty: false, command: ["ls", "-la"])
+        #expect(args == ["exec", "demo-web", "ls", "-la"])
+    }
+
+    @Test
+    func execArgumentsInteractiveTTY() {
+        let args = Application.ComposeCommand.execArguments(
+            containerName: "demo-web", interactive: true, tty: true, command: ["sh"])
+        #expect(args == ["exec", "-i", "-t", "demo-web", "sh"])
+    }
+
     /// Returns true if `flag` appears immediately followed by `value` in `args`.
     private func contains(_ args: [String], _ flag: String, _ value: String) -> Bool {
         zip(args, args.dropFirst()).contains { $0 == flag && $1 == value }

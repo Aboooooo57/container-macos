@@ -1147,6 +1147,77 @@ Builds images for services that define a `build:` section.
 container compose build [--file <path>] [--project-name <name>] [--debug]
 ```
 
+### `container compose stop` / `start` / `restart`
+
+Stops, starts, or restarts all of the project's containers (found by project label), delegating to the corresponding `container` command.
+
+**Usage**
+
+```bash
+container compose stop [--file <path>] [--project-name <name>] [--debug]
+container compose start [--file <path>] [--project-name <name>] [--debug]
+container compose restart [--file <path>] [--project-name <name>] [--debug]
+```
+
+### `container compose logs`
+
+Shows logs from all of the project's containers. With `--follow`, streams them until interrupted.
+
+**Usage**
+
+```bash
+container compose logs [--follow] [--file <path>] [--project-name <name>] [--debug]
+```
+
+**Options**
+
+*   `-f, --follow`: Follow log output
+
+### `container compose exec`
+
+Runs a command inside a running service's container.
+
+**Usage**
+
+```bash
+container compose exec [--interactive] [--tty] [--file <path>] [--project-name <name>] <service> <command> ...
+```
+
+**Arguments**
+
+*   `<service>`: Service name
+*   `<command>`: Command and arguments to run
+
+**Options**
+
+*   `-i, --interactive`: Keep stdin open
+*   `-t, --tty`: Allocate a TTY
+
+### `container compose pull`
+
+Pulls images for services that reference one (each unique image is pulled once).
+
+**Usage**
+
+```bash
+container compose pull [--file <path>] [--project-name <name>] [--debug]
+```
+
+### `container compose config`
+
+Validates the Compose file and prints information about it.
+
+**Usage**
+
+```bash
+container compose config [--services] [--volumes] [--file <path>] [--project-name <name>] [--debug]
+```
+
+**Options**
+
+*   `--services`: Print the service names, one per line
+*   `--volumes`: Print the named volume names, one per line
+
 ## Registry Management
 
 The registry commands manage authentication and defaults for container registries.

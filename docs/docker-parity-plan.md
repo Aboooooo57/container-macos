@@ -381,6 +381,8 @@ CLI command that orchestrates existing, tested commands. Ship each as its own
 change with unit tests for the pure logic (arg construction, parsing), verified
 through the standard build/test loop.
 
+**Status:** ✅ A1–A5 implemented — `compose logs` (`-f`), `exec`, `stop`/`start`/`restart`, `pull`, `config` (`--services`/`--volumes`). Registered under `container compose`, documented, and the pure helpers (`execArguments`, `containerName`) unit-tested. Remaining: A6 `container top`, A7 `image import`, A8 Docker aliases.
+
 ### Track B — Runtime subsystems (high impact, real engineering)
 
 These are the "behaves like Docker" features. Each is its own design doc +

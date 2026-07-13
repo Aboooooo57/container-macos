@@ -16,6 +16,7 @@
 
 import ArgumentParser
 import ContainerAPIClient
+import ContainerResource
 import ContainerizationError
 import Foundation
 import Logging
@@ -33,6 +34,13 @@ extension Application {
                 ComposeDown.self,
                 ComposePs.self,
                 ComposeBuild.self,
+                ComposeStop.self,
+                ComposeStart.self,
+                ComposeRestart.self,
+                ComposePull.self,
+                ComposeLogs.self,
+                ComposeExec.self,
+                ComposeConfig.self,
             ]
         )
 
@@ -269,7 +277,48 @@ extension Application {
             }
         }
 
+        // MARK: - Project lookup
+
+        /// The container name a service runs under (`container_name` or `<project>-<service>`).
+        static func containerName(project: String, service: String, spec: ComposeService) -> String {
+            spec.containerName ?? "\(project)-\(service)"
+        }
+
+        /// IDs of all containers belonging to a project, found by project label.
+        static func projectContainerIDs(project: String) async throws -> [String] {
+            let client = ContainerClient()
+            let filters = ContainerListFilters(labels: [projectLabel: "^\(project)$"]).withoutMachines()
+            return try await client.list(filters: filters).map { $0.id }.sorted()
+        }
+
+        /// `container exec` arguments for running a command in a service's container.
+        static func execArguments(
+            containerName: String, interactive: Bool, tty: Bool, command: [String]
+        ) -> [String] {
+            var args = ["exec"]
+            if interactive {
+                args.append("-i")
+            }
+            if tty {
+                args.append("-t")
+            }
+            args.append(containerName)
+            args += command
+            return args
+        }
+
         // MARK: - Subprocess reuse of the running `container` binary
+
+        /// Start the `container` binary without waiting; caller is responsible
+        /// for `waitUntilExit()`. Used to fan out concurrent log follows.
+        static func startContainerCLI(_ arguments: [String]) throws -> Foundation.Process {
+            let process = Foundation.Process()
+            process.executableURL = URL(fileURLWithPath: CommandLine.executablePath.string)
+            process.arguments = arguments
+            try process.run()
+            return process
+        }
+
 
         /// Run the `container` binary (the one currently executing) with the
         /// given arguments, inheriting stdio, and throw if it exits non-zero.
