@@ -388,7 +388,7 @@ container delete [--all] [--force] [--debug] [<container-ids> ...]
 *   `-a, --all`: Delete all containers
 *   `-f, --force`: Delete containers even if they are running
 
-### `container list (ls)`
+### `container list (ls, ps)`
 
 Lists containers. By default only running containers are shown. Output can be formatted as a table, JSON, YAML, or TOML.
 
@@ -1224,7 +1224,7 @@ The registry commands manage authentication and defaults for container registrie
 
 ### `container registry login`
 
-Authenticates with a registry. Credentials can be provided interactively or via flags. The login is stored for reuse by subsequent commands.
+Authenticates with a registry. Credentials can be provided interactively or via flags. The login is stored for reuse by subsequent commands. Also available at the top level as `container login` (Docker-style).
 
 **Usage**
 

@@ -225,10 +225,14 @@ public struct Application: AsyncLoggableCommand {
     }
 
     private static func otherCommands() -> [any ParsableCommand.Type] {
+        // `login`/`logout` are also reachable as `container registry login|logout`;
+        // exposing them at the top level matches Docker muscle memory.
         guard #available(macOS 26, *) else {
             return [
                 BuilderCommand.self,
                 ComposeCommand.self,
+                RegistryLogin.self,
+                RegistryLogout.self,
                 SystemCommand.self,
             ]
         }
@@ -237,6 +241,8 @@ public struct Application: AsyncLoggableCommand {
             BuilderCommand.self,
             ComposeCommand.self,
             NetworkCommand.self,
+            RegistryLogin.self,
+            RegistryLogout.self,
             SystemCommand.self,
         ]
     }
